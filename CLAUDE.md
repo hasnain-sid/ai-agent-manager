@@ -29,6 +29,15 @@ before any task.
 
 Progress lives in docs/progress.md. Architectural decisions are logged in docs/decisions.md.
 
+## Environment and language (CONFIRMED)
+
+- **Host:** Linux under WSL2 is the supported environment, and Claude Code runs inside WSL2.
+  Native Windows is offline analysis only, because the Claude Code shell sandbox (R2 C5) is
+  unavailable there (DEC-001).
+- **Language:** Python (DEC-002).
+- **Agent access:** existing Claude Code access for T01-T03 development (DEC-008). Release access
+  is open question OQ-001, resolved at T04.
+
 ## Current position
 
 Stage 1, topic T01 (Harness behaviour and extension surfaces; STEER; medium). Nothing built yet.
@@ -47,9 +56,11 @@ Stage 1, topic T01 (Harness behaviour and extension surfaces; STEER; medium). No
    | Required properties demonstrated; CI pass | `0` |
    | Internal error or unhandled exception (never a decision) | `1` |
    | Usage error, invalid configuration or incompatible contract | `2` |
-   | Demonstrated policy conflict or failed required check; CI fail | `10` |
+   | Demonstrated policy conflict or failed deterministic check; CI fail | `10` |
    | Approval pending | `11` |
    | Required evidence incomplete or unsupported; review required | `12` |
+
+   A rejected model claim never changes the exit code (DEC-006).
 
 4. **Labels keep their meaning.**
    - **CONFIRMED**: an input the user stated.
@@ -65,6 +76,17 @@ Stage 1, topic T01 (Harness behaviour and extension surfaces; STEER; medium). No
 Depth levels: **OWN** = implement or debug the essential behaviour yourself and defend it without
 notes. **STEER** = specify, review and test generated code. **AWARE** = explain applicability and
 recognise when it becomes relevant.
+
+## Core and the contract freeze (DEC-004)
+
+**Core** is: the evidence envelope (R3), the step runner and state machine (R4), the adapter
+protocol, the add-on and pack loader, the manager policy engine, the report schema and the exit
+codes. After the Stage 4 freeze (after T10):
+
+- No breaking changes and no capstone-specific code in core.
+- Additive, versioned fields are allowed, and each one requires re-running the contract fixtures.
+- The T14 verifier lives in the AWS add-on, not in core.
+- The T17 spend guard and evaluation ledger live in a separate evaluation module outside core.
 
 ## OWN topics: hints and review only
 
@@ -98,8 +120,8 @@ probes/
   README.md               executable probes against Claude Code (results pinned to a version)
 ```
 
-Product code does not exist yet. Its layout will be decided (and logged in docs/decisions.md)
-when Stage 1 build work begins.
+Product code does not exist yet. Its layout is decided at T03 and logged in docs/decisions.md
+then (DEC-009). Organise it so core (above) is separable from add-ons and the evaluation module.
 
 - **Learning material goes in `learning/Txx/`**, using the layout in learning/README.md.
 - **Product code is organised by product structure, never by topic.** No `t03/` packages or

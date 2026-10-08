@@ -20,18 +20,19 @@
 - Solo builder, AI-assisted, who must understand the core himself.
 - Spending cap ₹10,000 per month. Time is not fixed; scope follows availability.
 - Carried from the second source document's clarification record: the manager launches one supervised session; installed add-ons are trusted; the threat model covers accidental mistakes and hostile repository or tool content.
+- Host: Linux under WSL2 is the supported environment, and Claude Code runs inside WSL2. Native Windows is offline analysis only (DEC-001).
+- Implementation language: Python (DEC-002).
+- Development for T01–T03 uses existing Claude Code access (DEC-008).
 
 **Unconfirmed (section D ranks the options)**
 
-- How Claude is accessed (API key or existing subscription).
-- Host environment (a Windows host is implied; Linux or WSL2 is recommended).
+- How Claude is accessed for the release (direct API key is REC). Whether the Agent SDK can run on a subscription is open question OQ-001, resolved at T04.
 - AWS account, inspection permissions and permission to use any discovered credential.
-- Implementation language (Python is REC, not confirmed).
 
-**Release envelope (REC)**
+**Release envelope (REC; host and language CONFIRMED)**
 
 - One local manager process, one active workflow, one supervised Claude Code session, a local SQLite database, explicitly selected workspace roots.
-- Python on Linux or WSL2. Native Windows supports offline analysis only; Claude Code's shell sandbox is unavailable there ([platform support](https://code.claude.com/docs/en/setup), [sandboxing](https://code.claude.com/docs/en/sandboxing)).
+- Python on Linux under WSL2, with Claude Code running inside WSL2 (CONFIRMED, DEC-001, DEC-002). Native Windows supports offline analysis only; Claude Code's shell sandbox is unavailable there ([platform support](https://code.claude.com/docs/en/setup), [sandboxing](https://code.claude.com/docs/en/sandboxing)).
 - Containers are optional extra isolation, not a prerequisite and not a complete boundary.
 - Discovery never implies permission to use a credential.
 
@@ -44,7 +45,7 @@
 | Production release | 6–7 | Measured behaviour, packaging, compatibility, security and installation evidence. |
 | Optional | — | Later-session enforcement (step 9), GitHub add-on, Codex adapter, Access Analyzer policy generation and paid custom checks, interactive-session attachment, implemented multi-agent review. |
 
-### R1 — Capstone steps and acceptance criteria (PROPOSED — not confirmed by user)
+### R1 — Capstone steps and acceptance criteria (CONFIRMED by user, DEC-003)
 
 **Why the theme holds.** In the PocketOS incident a Cursor agent running Claude Opus 4.6 deleted a Railway production volume and its backups during a routine staging task ([ACS](https://ia.acs.org.au/article/2026/gone-in-9-seconds--ai-agent-deletes-company-database.html)). Railway's write-up says the agent found an account-scoped API token stored locally ([Railway](https://blog.railway.com/p/your-ai-wants-to-nuke-your-database)). The "violated every principle" line was the agent's own generated confession, relayed by the founder. The incident involved Cursor and Railway, not Claude Code and AWS, so this capstone is an analogue. The lesson transfers: instructions are not authority boundaries, and reachable credential scope is the blast radius.
 
@@ -63,7 +64,8 @@
 **Acceptance criteria** (run against a fixture world: fixture home directory, recorded session, recorded provider responses; live variants need authorised AWS access)
 
 - **AC1 Discovery.** Every seeded in-boundary source is reported exactly once; the out-of-boundary decoy is reported as `out_of_boundary`; a canary-secret scan of all artefacts finds nothing.
-- **AC2 References versus identity.** Every reference has a principal or `unresolved(reason)`. The inspector identity is recorded separately. No discovered credential is used without an explicit grant.
+- **AC2a References (static; passed in Stage 2).** Every reference is a declared principal reference or `unresolved` with reason `resolution_not_granted` (DEC-007).
+- **AC2b Identity separation (passed in Stage 4).** The inspector identity is recorded separately. No discovered credential is used without an explicit grant (DEC-007).
 - **AC3 Authorization evidence.** Every in-scope tuple has a decision with its inputs and complete pagination. Local-evaluator versus simulator disagreements are listed; a silent mismatch fails.
 - **AC4 Graph.** Every material edge cites evidence or is `unknown`. The seeded over-privileged principal shows `s3:DeleteObject` reachable on an enumerated bucket.
 - **AC5 Observation.** Normalised events equal the golden set; injected duplicates collapse; injected gaps are flagged; unattributed provider events are not counted as observed.
@@ -73,7 +75,7 @@
 - **AC9 Recovery.** Kill and resume completes without re-executing finished steps. An effect recorded immediately before the crash is reconciled, not duplicated.
 - **AC10 Conflict.** Approved deletion plus a deny-deletion restriction produces a failure that names both sides.
 - **AC11 Claim gate.** A forged model claim or fabricated evidence ID cannot enter authoritative findings or change the exit code.
-- **AC12 Contract freeze.** Both section F rehearsals run with no change to core code after the freeze.
+- **AC12 Contract freeze.** After the Stage 4 freeze, the remaining capstone and both section F rehearsals run with no breaking change and no capstone-specific code in core (core as defined in the Stage 4 contract-freeze note). Any additive, versioned core field is accompanied by a passing re-run of the contract fixtures (DEC-004).
 
 ### R2 — Claude Code capability matrix
 
@@ -134,11 +136,13 @@ Each step declares a timeout, cancellation behaviour, output bound and retry bud
 | Required properties demonstrated; CI pass | `0` |
 | Internal error or unhandled exception (never a decision) | `1` |
 | Usage error, invalid configuration or incompatible contract | `2` |
-| Demonstrated policy conflict or failed required check; CI fail | `10` |
+| Demonstrated policy conflict or failed deterministic check; CI fail | `10` |
 | Approval pending | `11` |
 | Required evidence incomplete or unsupported; review required | `12` |
 
 Decision codes start at 10 because an uncaught Python exception exits `1` and Click, Typer and argparse exit `2` on usage errors. Both source documents put decisions on those numbers, which lets a crash read as a policy verdict.
+
+A rejected model claim never changes the exit code. Exit `10` is only for a demonstrated conflict or a failed deterministic check; a required property that lacks evidence is review, exit `12` (DEC-006).
 
 ### R5 — Provider evidence boundary P (AWS)
 
@@ -180,8 +184,8 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 ### Executable checkpoint
 
 - **What runs:** a minimal installable package with one typed fixture tool, bounded input and output, sanitisation, a deterministic result checker and the report and exit-code contract.
-- **Invoke:** `agm rehearse foundation`
-- **Success:** valid input produces the expected result and an R3 envelope. Malformed output, an out-of-root path and a seeded secret are rejected or sanitised. Stub steps yield exit `12`, not `0`.
+- **Invoke:** `agm rehearse foundation`, `agm rehearse secrets` (owned by T02, DEC-005)
+- **Success:** valid input produces the expected result and an R3 envelope. Malformed output, an out-of-root path and a seeded secret are rejected or sanitised. Stub steps yield exit `12`, not `0`. The `secrets` rehearsal (section G) finds no seeded value in any output.
 - **Interview evidence:** a trust-boundary diagram, and a demonstration that repository text cannot authorise a tool.
 - **Remaining limits:** fixture execution only. No session capture, durable recovery or AWS claims.
 
@@ -197,7 +201,7 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 8. **Understanding check:** What continues the loop? What can compaction remove? Why is a post-tool hook too late to prevent an effect? What happens when a command hook exits 1 with plain stderr? **Draw** one model and tool cycle with every control point.
 9. **Review checklist for generated code:** Assumed event completeness; permission and sandbox confusion; one-tool-per-turn assumptions; invented hook behaviour (G10). Detect with negative probes.
 10. **Capstone contribution:** 1, 5, 9.
-11. **Depends on:** None. External: a working Claude Code install.
+11. **Depends on:** None. External: a working Claude Code install inside WSL2 (DEC-001), using existing Claude Code access (DEC-008).
 
 ### T02
 
@@ -207,7 +211,7 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 4. **What I can skip or delegate:** Defending against a hostile machine administrator or a malicious trusted add-on; bespoke cryptography; formal certification.
 5. **Native versus build:** Use native restrictions (C4, C5, C6) as recommended configuration. Enforce manager-owned operations in code. The agent process never receives AWS credentials; typed tools hold them.
 6. **Decisions this unlocks:** Separate inspector process versus shared environment; sanitised workspace copy versus broad repository access; whether the manager mints the workload's provider session.
-7. **Build deliverable:** Threat model with data-flow diagram and ranked threats; authority manifest; a read-only inspector IAM policy; secret-safe launch contract; attack fixtures. **Independent exercise:** implement a deny-by-default tool wrapper and debug an environment-variable leak into a child process, without a coding assistant.
+7. **Build deliverable:** Threat model with data-flow diagram and ranked threats; authority manifest; a read-only inspector IAM policy; secret-safe launch contract; attack fixtures; the section G `agm rehearse secrets` rehearsal (DEC-005). **Independent exercise:** implement a deny-by-default tool wrapper and debug an environment-variable leak into a child process, without a coding assistant.
 8. **Understanding check:** Who can authorise credential use? Can a prompt grant filesystem authority? Which subprocess inherits a secret? Name three ways in-agent enforcement can be bypassed. **Draw** the agent, manager, inspector and provider boundaries.
 9. **Review checklist for generated code:** G1, G2, G9. Symlink escape; inherited credentials; secret-bearing exceptions; unsafe YAML loading; model-generated approval records.
 10. **Capstone contribution:** 1–9.
@@ -220,7 +224,7 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 3. **What I must understand:** Strict inputs plus semantic validation; discriminated status unions; structured errors (throttle, auth, not found, invalid, timeout, unknown) with a retryable flag; subprocess lifecycle, cancellation and output limits; side-effect classes from R4; record and replay of provider responses; the R4 exit-code table; stdout for the report and stderr for logs.
 4. **What I can skip or delegate:** General shell parsing; a universal command-wrapper framework; CLI framework internals.
 5. **Native versus build:** Reuse Pydantic, subprocess and the AWS SDK. Strict mode reduces coercion but does not replace domain checks ([strict mode](https://docs.pydantic.dev/latest/concepts/strict_mode/)). Build thin domain wrappers.
-6. **Decisions this unlocks:** Direct API wrapper versus subprocess; deterministic calculation versus model-assisted proposal; recorded responses versus mocks (REC: recorded, for determinism and zero provider spend in CI).
+6. **Decisions this unlocks:** Direct API wrapper versus subprocess; deterministic calculation versus model-assisted proposal; recorded responses versus mocks (REC: recorded, for determinism and zero provider spend in CI); the product code layout, logged in docs/decisions.md when decided (DEC-009).
 7. **Build deliverable:** One file-reading wrapper and one fake provider wrapper with typed success and error envelopes; the report JSON Schema generated from models; one function mapping report status to exit code, with a test that every status maps to exactly one code.
 8. **Understanding check:** Can valid JSON be wrong? When is retry unsafe? What happens after output truncation? Why must an internal error never return a decision code? **Explain** the lifecycle of a cancelled child process.
 9. **Review checklist for generated code:** G3, G7, G8, G10. Shell interpolation; unchecked exit status; unrestricted endpoints; permissive defaults on optional fields; `sys.exit` scattered across modules.
@@ -232,8 +236,8 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 ### Executable checkpoint
 
 - **What runs:** a supervised Claude task that reads an innocuous fixture through a declared tool profile; an offline replay of the same event shape; bounded discovery over a fixture home directory.
-- **Invoke:** `agm rehearse capture --adapter claude`, `agm rehearse capture --adapter replay`, `agm inventory --boundary boundary.yaml`
-- **Success:** Both adapters produce valid R3 records. Duplicate events do not duplicate facts. A missing result creates a coverage gap. Inventory distinguishes references from verified identity. A booby-trapped `credential_process` is not executed. A fake adapter lacking a required capability yields `unsupported`, not a crash. AC1, AC2 and the session half of AC5 pass.
+- **Invoke:** `agm rehearse capture --adapter claude`, `agm rehearse capture --adapter replay`, `agm inventory --boundary boundary.yaml`, `agm rehearse coverage`
+- **Success:** Both adapters produce valid R3 records. Duplicate events do not duplicate facts. A missing result creates a coverage gap. Inventory distinguishes references from verified identity. A booby-trapped `credential_process` is not executed. A fake adapter lacking a required capability yields `unsupported`, not a crash. AC1, AC2a and the session half of AC5 pass (DEC-007). The `coverage` rehearsal (section G, owned by T06) shows every omitted input as a gap (DEC-005).
 - **Interview evidence:** a captured tool-and-result chain; a demonstration of ambiguous attribution; the decision to make discovery static-first because resolving a profile can execute code.
 - **Remaining limits:** No AWS authorization analysis. No claim to observe every subprocess or network request. Without agent access only the replay profile passes; the Claude compatibility gate stays unmet.
 
@@ -244,7 +248,7 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 3. **What I must understand:** Required versus optional capabilities; the difference between what the interface promises and what one adapter supports; tested version ranges; negotiation at run start; launch profiles with explicit setting sources (C11); unsupported-operation errors.
 4. **What I can skip or delegate:** A second production adapter; interactive-session attachment; dynamic plugin loading.
 5. **Native versus build:** Integrate R2 through one Claude adapter built on the Python Agent SDK, plus one deterministic replay adapter. Build the contract and conformance suite.
-6. **Decisions this unlocks:** Reject a workflow, degrade explicitly to observation, or choose another adapter.
+6. **Decisions this unlocks:** Reject a workflow, degrade explicitly to observation, or choose another adapter. Resolves open question OQ-001: whether the Agent SDK can run on a subscription, and therefore how the Claude adapter authenticates.
 7. **Build deliverable:** Adapter protocol and capability model; Claude adapter with a declared tested range; replay adapter; fake adapter; a conformance suite every adapter must pass. Capability entries carry probe evidence.
 8. **Understanding check:** Does an interface guarantee implementation support? When is degradation unsafe? What invalidates a capability result? **Draw** core-to-adapter dependencies and the types that cross.
 9. **Review checklist for generated code:** Vendor types leaking into core; fabricated support flags; version comparison on strings; silent fallback from blocking to observation.
@@ -273,7 +277,7 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 4. **What I can skip or delegate:** Whole-machine secret hunting; OS keychains; arbitrary token-store parsing; automatic credential-process execution.
 5. **Native versus build:** Read supported configuration statically. Reuse botocore's config loader for parsing. Build a reference-only inventory. Live resolution is a separate granted operation, never a fallback chain.
 6. **Decisions this unlocks:** Which sources are inspected; which identities may be resolved; which gaps matter to the workflow.
-7. **Build deliverable:** Inventory for selected environment names, explicit `.env` files, AWS configuration files, MCP env blocks and Claude Code settings layers; a coverage manifest; a fixture home with several sources and one decoy.
+7. **Build deliverable:** Inventory for selected environment names, explicit `.env` files, AWS configuration files, MCP env blocks and Claude Code settings layers; a coverage manifest; a fixture home with several sources and one decoy; the section G `agm rehearse coverage` rehearsal (DEC-005).
 8. **Understanding check:** Reference versus principal? Configured versus callable tool? Can inspecting a profile execute code? With an environment key pair and a selected profile both set, which wins? **Explain** one precedence collision.
 9. **Review checklist for generated code:** G1, G3, G9. Nested roots; symlinks; duplicate definitions; unreadable files; an expired SSO cache treated as "no credential".
 10. **Capstone contribution:** 1, 2.
@@ -284,8 +288,8 @@ Decision codes start at 10 because an uncaught Python exception exits `1` and Cl
 ### Executable checkpoint — first useful release
 
 - **What runs:** bounded discovery → supervised local file task → normalised evidence → exact-tool manager-policy candidate → independent verification → JSON and Markdown report.
-- **Invoke:** `agm rehearse first-release`
-- **Success:** An approved read is preserved. A prohibited write is rejected. A forged model claim cannot enter authoritative findings (AC11). A restarted run reaches the same checked result (AC7, AC9).
+- **Invoke:** `agm rehearse first-release`, `agm rehearse recovery` (owned by T07, DEC-005)
+- **Success:** An approved read is preserved. A prohibited write is rejected. A forged model claim cannot enter authoritative findings (AC11). A restarted run reaches the same checked result (AC7, AC9). The `recovery` rehearsal (section G) survives a crash around each state transition and artefact commit.
 - **Failure rehearsal:** A fake external ledger records an effect immediately before the manager is interrupted. Recovery reconciles it without duplicating the effect. An unreconcilable variant stops for intervention.
 - **Interview evidence:** demonstrate the crash gap and defend state recovery versus effect replay.
 - **Remaining limits:** Checks the declared local workload only. No AWS coverage, no future-workload sufficiency, no universal interception.
@@ -300,7 +304,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 4. **What I can skip or delegate:** Distributed scheduling; general compensation engines; dynamic workflows; multi-worker concurrency.
 5. **Native versus build:** Reuse native agent sessions (C1). Build a small durable coordinator for a fixed DAG on SQLite. Adopt a workflow library only when its semantics remove demonstrated complexity.
 6. **Decisions this unlocks:** Retry, reconcile, resume, cancel or stop for intervention.
-7. **Build deliverable:** Durable runner, workflow-definition loader and failure-injection suite. **Independent exercise:** implement transition validation and debug the effect-before-commit crash against a separate fake ledger, without a coding assistant.
+7. **Build deliverable:** Durable runner, workflow-definition loader and failure-injection suite; the section G `agm rehearse recovery` rehearsal (DEC-005). **Independent exercise:** implement transition validation and debug the effect-before-commit crash against a separate fake ledger, without a coding assistant.
 8. **Understanding check:** When is retry safe? What does resume restore and what does it never redo? What makes an approval stale? What must be deterministic between steps? **Draw** the ambiguous-outcome path.
 9. **Review checklist for generated code:** G7. Kill execution around each commit; concurrent launch; late results after cancellation; duplicate approvals; timestamps inside idempotency keys; timeouts mapped to failure.
 10. **Capstone contribution:** 1–9.
@@ -339,11 +343,12 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 ### Executable checkpoint
 
 - **What runs:** capstone steps 1–4 using frozen core contracts, the AWS add-on, the effect pack and the workflow definition.
-- **Invoke:** `agm rehearse blast-radius --only 1-4 --source fixtures`; with authorised access, `--source aws --scope lab-scope.json`
-- **Success:** AC3 and AC4 pass. The local evaluator and the simulator agree on the fixed case matrix or every disagreement is listed. Missing policy or context evidence produces exit `12`. A role subject with a bucket policy is marked `partial`. The breadth probe reports the seeded account-wide destructive action.
+- **Invoke:** `agm rehearse blast-radius --only 1-4 --source fixtures`; with authorised access, `--source aws --scope lab-scope.json`; `agm rehearse aws-unknown` (owned by T11, DEC-005)
+- **Success:** AC2b, AC3 and AC4 pass (DEC-007). The local evaluator and the simulator agree on the fixed case matrix or every disagreement is listed. Missing policy or context evidence produces exit `12`. A role subject with a bucket policy is marked `partial`. The breadth probe reports the seeded account-wide destructive action. The `aws-unknown` rehearsal (section G) gives `12` for the inaccessible-policy and role-with-bucket-policy cases.
+- **Freeze test (end of Stage 4):** F1, the guardrail-conformance audit, is built and run on the frozen core as the first freeze test. Its four fixture repositories produce the golden decisions with no core change (DEC-005).
 - **Interview evidence:** one real evaluator-versus-simulator disagreement and how it surfaces as unknown; the role and resource-policy limitation and why it becomes unknown, not safe.
 - **Remaining limits:** R5 exclusions. Single account. Live support is not declared tested until the live gate passes.
-- **Contract freeze:** after T10, the remaining capstone and both section F rehearsals must need no new core code. A necessary change reopens compatibility tests.
+- **Contract freeze (DEC-004):** after T10, core is frozen. **Core** means: the evidence envelope (R3), the step runner and state machine (R4), the adapter protocol, the add-on and pack loader, the manager policy engine, the report schema and the exit codes. The freeze forbids breaking changes and capstone-specific code in core. Additive, versioned fields are allowed and require re-running the contract fixtures. The T14 verifier lives in the AWS add-on. The T17 spend guard and evaluation ledger live in a separate evaluation module outside core. A necessary breaking change reopens compatibility tests.
 
 ### T10
 
@@ -367,7 +372,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 4. **What I can skip or delegate:** Service-specific condition keys beyond the subset; cross-account evaluation; RCP evaluation; other AWS services at tuple depth; GitHub authorization. Collection plumbing and fixtures can be generated.
 5. **Native versus build:** Reuse the AWS SDK and the provider's simulation and validation APIs as oracles (R5). Build the subset evaluator, scope validation, action mappings and evidence normalisation. Third-party IAM evaluators may serve as a development-time differential oracle only; check licence and maintenance before use (UNVERIFIED).
 6. **Decisions this unlocks:** Which tuples can be evaluated and simulated; what stays unknown; whether a provider-policy proposal is justified at all.
-7. **Build deliverable:** AWS add-on covering R5; an evaluator returning a decision with reasons and matched statements; a differential case matrix; a permission manifest for the inspector; recorded-response fixtures; authorised live contract tests. **Independent exercise:** hand-write statement matching, debug a seeded `NotAction` plus `Deny` case that produces an unexpected allow, and write the property "adding an explicit deny never enlarges the allowed set".
+7. **Build deliverable:** AWS add-on covering R5; an evaluator returning a decision with reasons and matched statements; a differential case matrix; a permission manifest for the inspector; recorded-response fixtures; authorised live contract tests; the section G `agm rehearse aws-unknown` rehearsal (DEC-005). **Independent exercise:** hand-write statement matching, debug a seeded `NotAction` plus `Deny` case that produces an unexpected allow, and write the property "adding an explicit deny never enlarges the allowed set".
 8. **Understanding check:** Identity policy allows `s3:*`, boundary allows `s3:Get*`: result for `s3:PutObject`? Does inspector denial imply subject denial? Why do role resource policies create a gap? Can simulation prove future success? **Draw** the evaluation flow for a same-account request with a boundary and a bucket policy.
 9. **Review checklist for generated code:** G3, G4, G10. Wrong ARN types (bucket versus object); a `Deny` with an unmet condition treated as deny; ignored group policies; discarded session restrictions; errors normalised to deny; policy documents not decoded as the API returns them.
 10. **Capstone contribution:** 2, 3, 7.
@@ -417,7 +422,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 2. **Why the manager needs it:** This is the core claim — a smaller credential would have sufficed — and the place where overclaiming is most tempting.
 3. **What I must understand:** Synthesis from approved observed tuples plus declared allowances, resource-scoped where the ARN is known and flagged where it is not; never including prohibited or pack-critical actions unless declared; two-sided verification (must-allow and must-not-allow matrices); verifier independence from the synthesiser; what each oracle in R5 establishes; why a manager approval condition has no IAM equivalent.
 4. **What I can skip or delegate:** Applying policies; condition-key synthesis beyond resource scoping; SCP generation; model-generated candidates.
-5. **Native versus build:** Build deterministic synthesis. Integrate `SimulateCustomPolicy` and `ValidatePolicy`. Paid custom checks and policy generation are optional corroboration.
+5. **Native versus build:** Build deterministic synthesis. Integrate `SimulateCustomPolicy` and `ValidatePolicy`. Paid custom checks and policy generation are optional corroboration. The verifier lives in the AWS add-on, not in core, and still shares no logic with the synthesiser (DEC-004).
 6. **Decisions this unlocks:** How to treat unexercised legitimate paths: a declared-allowance file (REC), widening to service-level read, or accepting denials. Each changes what the report may claim.
 7. **Build deliverable:** Synthesiser, separate verifier, and a report section listing oracle, conditions, result and what it does not establish. **Independent exercise:** hand-write the minimal policy for the fixture session, run it through custom-policy simulation and validation, and explain every discrepancy against the synthesiser's output.
 8. **Understanding check:** What does a full pass prove and not prove? Why must the verifier not reuse the synthesiser's matching code? What does "allows all observed actions" fail to guarantee? **Explain** the exact sentence the report may print after a full pass.
@@ -432,6 +437,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 - **What runs:** the blast-radius workflow with minimal evidence context, then variants with stale instructions, irrelevant tool schemas and a fabricated model claim; a frozen evaluation suite.
 - **Invoke:** `agm rehearse context-and-evaluation`, `agm eval run --suite evals/blast-radius`
 - **Success:** Deterministic findings do not change across variants. Unsupported claims are rejected. Missing usage stays unknown. A budget guard refuses a live run whose projected spend exceeds the configured cap. Extra context or agents are kept only where measured benefit justifies them.
+- **Freeze test (end of Stage 6):** F2, the bounded source-code migration, is built and run on the frozen core. A correct patch passes, a wrong-but-compiling patch fails behavioural tests and an out-of-scope edit is rejected, with no core change (DEC-005).
 - **Interview evidence:** a paired comparison with raw outcomes, failures, cost provenance and limits; a claim scoped to its suite.
 - **Remaining limits:** Small synthetic suite. No universal optimisation claim. Implemented multi-agent coordination stays optional.
 
@@ -443,7 +449,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 4. **What I can skip or delegate:** Vector memory; semantic compression; automatic permission-changing tool selection; an MCP server that exposes manager authority.
 5. **Native versus build:** Reuse C1, C7, C8 and C10. Add evidence selection and explicit tool profiles only where native behaviour leaves a demonstrated gap.
 6. **Decisions this unlocks:** Attach evidence, retrieve it on demand, exclude stale context, or reduce exposed tools.
-7. **Build deliverable:** Versioned context manifest, one task-specific tool profile, a loaded-instructions provenance block in the report, and stale-memory and compaction fixtures.
+7. **Build deliverable:** Versioned context manifest, one task-specific tool profile, a loaded-instructions provenance block in the report (an additive, versioned report-schema field; re-run the contract fixtures, DEC-004), and stale-memory and compaction fixtures.
 8. **Understanding check:** Does more context always help? Can compaction remove a restriction? Is tool discovery authorisation? Why are MCP tool annotations untrusted? **Explain** a conflicting-memory example.
 9. **Review checklist for generated code:** G1. Secrets entering prompts; stale claims treated as facts; auto-enabled servers; profile drift; memory overriding code-enforced authority.
 10. **Capstone contribution:** 1, 5, 8.
@@ -469,7 +475,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 2. **Why the manager needs it:** The ₹10,000 cap is CONFIRMED, and reliability claims need measured outcomes with missing data kept explicit.
 3. **What I must understand:** Correlation by session and prompt identifiers; inclusive versus exclusive usage across subagents; cached tokens; measured versus estimated versus unknown; why token counts are not an invoice; workloads with ground-truth labels; recall and precision on seeded authority; false-unknown rate; variance across repeated agent runs; paired baselines; regression thresholds.
 4. **What I can skip or delegate:** A hosted observability platform; dashboards; public leaderboard claims; model-as-judge scoring.
-5. **Native versus build:** Reuse native usage events (C13). Build a local evaluation ledger and a spend guard.
+5. **Native versus build:** Reuse native usage events (C13). Build a local evaluation ledger and a spend guard in a separate evaluation module outside core (DEC-004).
 6. **Decisions this unlocks:** Whether to keep a context profile, an add-on, a model-assisted step or a reviewer; record-once-replay-often versus live runs (REC: replay gates CI; live variance is reported, not gated).
 7. **Build deliverable:** Frozen workload suite with labels, raw outcomes, repeated model trials, deterministic baselines, a stored regression baseline and labelled cost figures.
 8. **Understanding check:** Can token counts equal an invoice? How do caches distort a comparison? Why keep failures in results? What does five out of five support? **Explain** one paired experiment.
@@ -481,7 +487,7 @@ Ship basic installation, CLI help, a licence and a fixture walkthrough here. T18
 
 ### Executable checkpoint
 
-- **What runs:** clean installation, the first-release walkthrough, all mandatory blast-radius fixtures, authorised live compatibility checks for any advertised live support, and both section F rehearsals.
+- **What runs:** clean installation, the first-release walkthrough, all mandatory blast-radius fixtures, authorised live compatibility checks for any advertised live support, and a re-run of both section F rehearsals (F1 built in Stage 4, F2 in Stage 6; DEC-005).
 - **Invoke:** `agm rehearse release --profile declared-support.json`
 - **Success:** The declared support matrix passes. Every section G check has evidence. AC12 holds. The installed artefact reproduces the golden report. A second developer can reproduce the supported demonstration.
 - **Interview evidence:** the release artefact, the compatibility policy, failure recordings and the completed OWN exercises.
@@ -573,18 +579,22 @@ Six of eighteen. T11 and T14 are owned because you named IAM evaluation and veri
 
 ### D.1 Confirmed requirements (not reopened)
 
-Blast-radius theme with IAM evaluation, graph and verified synthesis as core work; Claude Code first with a vendor-independent core; solo, AI-assisted, core understood personally; ₹10,000 monthly cap; no fixed time; one supervised session; trusted installed add-ons; threat model of accidental mistakes and hostile repository or tool content.
+Blast-radius theme with IAM evaluation, graph and verified synthesis as core work; Claude Code first with a vendor-independent core; solo, AI-assisted, core understood personally; ₹10,000 monthly cap; no fixed time; one supervised session; trusted installed add-ons; threat model of accidental mistakes and hostile repository or tool content. Added by resolution: Linux under WSL2 as the supported host with native Windows offline only (DEC-001); Python (DEC-002); capstone steps 1–9 and AC1–AC12 as amended (DEC-003, DEC-006, DEC-007); existing Claude Code access for T01–T03 development (DEC-008).
 
 ### D.2 Unconfirmed inputs, ranked easiest first
 
 | Area | Option | What it enables | Recommendation |
 |---|---|---|---|
-| Runtime | 1. Existing Windows host, offline mode | Fixtures, schemas, storage, policy, reports | Easiest start; no shell-sandbox demonstration |
-| Runtime | 2. Linux or WSL2 supervised runner | First live-agent profile | **REC** |
+| Runtime | 1. Existing Windows host, offline mode | Fixtures, schemas, storage, policy, reports | **CONFIRMED** as offline analysis only (DEC-001); no shell-sandbox demonstration |
+| Runtime | 2. Linux under WSL2 supervised runner, Claude Code inside WSL2 | First live-agent profile | **CONFIRMED** supported environment (DEC-001) |
 | Runtime | 3. Restricted container or VM | Extra process and filesystem separation | Add only if hostile-code execution requires it |
 | Agent access | 1. Replay adapter | All deterministic development and failure tests | **Start here**; no inference spend |
-| Agent access | 2. Existing Claude Code access | Personal launch and capture experiments | Fine for development; do not assume it is redistributable through a product |
-| Agent access | 2. Direct API access | Programmatic integration and usage accounting | **REC for the release**; needs a spend ceiling inside the cap ([SDK authentication](https://code.claude.com/docs/en/agent-sdk/overview)) |
+| Agent access | 2. Existing Claude Code access | Personal launch and capture experiments | **CONFIRMED for T01–T03 development** (DEC-008); do not assume it is redistributable through a product |
+| Agent access | 3. Direct API key | Programmatic integration and usage accounting | **REC for the release**; needs a spend ceiling inside the cap ([SDK authentication](https://code.claude.com/docs/en/agent-sdk/overview)) |
+
+Rows marked CONFIRMED are resolved; see docs/decisions.md.
+
+**Open question OQ-001 (resolve at T04).** Can the Agent SDK run on an existing Claude subscription, or does it require a direct API key? This decides how the Claude adapter authenticates and how inference spend counts against the cap. Not a decision yet.
 | AWS | 1. Sanitised fixture and import bundle | Offline analysis and deterministic tests | **Start here** |
 | AWS | 2. Designated read and simulation inspector | Live bounded policy evidence | **REC live extension** |
 | AWS | 3. Disposable lab workload resources | Correlation and observed-call evidence | Useful; needs cleanup and spend controls |
@@ -612,7 +622,6 @@ Blast-radius theme with IAM evaluation, graph and verified synthesis as core wor
 
 | Choice | Recommended | Main alternative | Trade-off | Evidence that changes it |
 |---|---|---|---|---|
-| Core language | Python | TypeScript | Existing skill and library fit versus SDK parity | A required adapter API is materially better in TypeScript |
 | Storage | SQLite plus sanitised artefacts | PostgreSQL | Zero operations versus concurrency | Multiple writers or remote workers become real |
 | Workflow implementation | Small fixed-DAG coordinator | Durable-workflow library | Small surface versus proven semantics | Asynchronous long-running provider jobs or custom failure handling keep growing |
 | Manager policy | Small typed declarative rules | Established policy engine | Easy audit versus expressiveness | Rule composition becomes hard to specify or test |
@@ -683,8 +692,8 @@ Read steps keep every observation and do not pretend that retries saw one atomic
 
 | Step | Manager component | Execution | Required add-on | Evidence or acceptance check | Principal limitation |
 |---|---|---|---|---|---|
-| 1 Discover references | Inventory and sanitisation | Deterministic | Claude adapter; source parsers | AC1; inspected and excluded source manifest | Declared boundary only; a reference is not use |
-| 2 Authorization evidence | Typed tools and evidence store | Deterministic | AWS add-on | AC2, AC3; exact inputs, responses, pagination, coverage | Simulator and inspection limits in R5 |
+| 1 Discover references | Inventory and sanitisation | Deterministic | Claude adapter; source parsers | AC1, AC2a; inspected and excluded source manifest | Declared boundary only; a reference is not use |
+| 2 Authorization evidence | Typed tools and evidence store | Deterministic | AWS add-on | AC2b, AC3; exact inputs, responses, pagination, coverage | Simulator and inspection limits in R5 |
 | 3 Graph | Relational projection and export | Deterministic | AWS add-on mapping | AC4; every edge cites evidence or is unknown | A path is not proof of exploitable reachability |
 | 4 Classify | Pack evaluator | Deterministic | S3 effect and recovery pack | Pack version recorded; recovery prerequisites verified or unknown | Recovery depends on backups and privileges outside view |
 | 5 Compare | Event normalisation and comparison | Deterministic | Typed S3 tools; optional CloudTrail importer | AC5; attempt versus success; attribution level | Missing observations do not prove non-use |
@@ -710,7 +719,7 @@ Policy acquisition and version provenance, pagination, principal distinctions, A
 | Approved workload is list and read calls; all required scoped evidence exists; candidate preserves them and denies represented deletions | Complete within declared scope | Pass, `0` |
 | Inspector cannot read an applicable policy, context is missing, or a required trace is unavailable | Incomplete; available simulated outcomes kept without promotion | Review, `12` |
 | Approved observed work contains deletion while restrictions prohibit deletion | Complete conflict finding naming the operation and the opposing rule | Fail, `10` |
-| A model states "no destructive access exists" while evidence covers only selected reads | Unsupported claim rejected; report built from verified records | Fail, `10`, if the claim was required |
+| A model states "no destructive access exists" while evidence covers only selected reads | Claim rejected; report built from verified records. The rejected claim never changes the exit code; if the asserted property is required and lacks evidence, the result is review | Review, `12` (DEC-006) |
 | Candidate needs approval for a declared write | Approval request bound to digests | Pending, `11` |
 
 Resolve a conflict by changing the approved workload, changing the restriction, or recording a supported exception, then re-version and re-verify. Never silently drop the conflicting operation.
@@ -735,6 +744,8 @@ Stage 3: "For this declared local workload, the manager captured supported event
 
 **Job:** for a repository, check that the effective Claude Code configuration implements the manager's required guardrails and report the bypass opportunities in R2.
 
+**When:** built at the end of Stage 4 as the first contract-freeze test; re-run in Stage 7 (DEC-005).
+
 | Step | Manager component | Execution | Required add-on | Evidence or acceptance check | Principal limitation |
 |---|---|---|---|---|---|
 | 1 Resolve configuration | Config resolver | Deterministic | Claude adapter (reused) | Per-key source layer matches golden file | Cloud-hosted sessions out of scope |
@@ -748,6 +759,8 @@ Stage 3: "For this declared local workload, the manager captured supported event
 ### F2 — Bounded source-code migration
 
 **Job:** migrate one deprecated helper call to its replacement in a fixture repository, verify behaviour and export a reviewed patch.
+
+**When:** built at the end of Stage 6; re-run in Stage 7 (DEC-005).
 
 | Step | Manager component | Execution | Required add-on | Evidence or acceptance check | Principal limitation |
 |---|---|---|---|---|---|
@@ -765,14 +778,14 @@ Answer each with yes or no and an evidence reference. Correct handling of an uns
 | Readiness check | Concrete demonstration |
 |---|---|
 | Does the complete first-release path run? | `agm rehearse first-release`; keep input, receipt, evidence, policy, verification, report |
-| Is coverage explicit? | `agm rehearse coverage`; omit a root, an event, a policy page and a source; each gap appears |
+| Is coverage explicit? | `agm rehearse coverage` (T06, Stage 2); omit a root, an event, a policy page and a source; each gap appears |
 | Are references distinct from identities and use? | Fixture with an unused credential reference and a separately identified inspector |
 | Does discovery avoid executing untrusted configuration? | Booby-trapped `credential_process`; marker file absent |
-| Are secrets kept out of every output? | `agm rehearse secrets`; seeded values in arguments, stderr, provider errors, artefacts and model context are absent |
+| Are secrets kept out of every output? | `agm rehearse secrets` (T02, Stage 1); seeded values in arguments, stderr, provider errors, artefacts and model context are absent |
 | Are secret-detection limits documented? | Security document states that seeded tests do not prove arbitrary text secret-free |
-| Are unknown authorization results preserved? | `agm rehearse aws-unknown`; inaccessible policy and role-with-bucket-policy cases give `12` |
+| Are unknown authorization results preserved? | `agm rehearse aws-unknown` (T11, Stage 4); inaccessible policy and role-with-bucket-policy cases give `12` |
 | Is evaluator disagreement surfaced? | Differential run lists disagreements; an injected unreported mismatch fails CI |
-| Does interruption preserve state? | `agm rehearse recovery`; crash around each state transition and artefact commit |
+| Does interruption preserve state? | `agm rehearse recovery` (T07, Stage 3); crash around each state transition and artefact commit |
 | Are ambiguous effects handled without blind retry? | Fake ledger shows exactly one effect after recovery; the unreconcilable case stops |
 | Are cancellation and late results safe? | Cancel a running attempt; late output cannot mark it successful |
 | Do timeouts map to unknown? | Throttled replay fixture never yields pass |
