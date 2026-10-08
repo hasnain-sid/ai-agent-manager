@@ -34,6 +34,10 @@ Progress lives in docs/progress.md. Architectural decisions are logged in docs/d
 - **Host:** Linux under WSL2 is the supported environment, and Claude Code runs inside WSL2.
   Native Windows is offline analysis only, because the Claude Code shell sandbox (R2 C5) is
   unavailable there (DEC-001).
+- **Repository location:** the repo must live on the WSL2 filesystem (for example under the WSL2
+  home directory), not under `/mnt/c`. `/mnt/c` is slow and does not reliably keep Unix permission
+  bits, which hook probes depend on. Text files use LF line endings, enforced by `.gitattributes`
+  (DEC-015).
 - **Language:** Python (DEC-002).
 - **Agent access:** existing Claude Code access for T01-T03 development (DEC-008). Release access
   is open question OQ-001, resolved at T04.
@@ -77,16 +81,28 @@ Depth levels: **OWN** = implement or debug the essential behaviour yourself and 
 notes. **STEER** = specify, review and test generated code. **AWARE** = explain applicability and
 recognise when it becomes relevant.
 
-## Core and the contract freeze (DEC-004)
+## Core and the contract freeze (DEC-004, DEC-010)
 
-**Core** is: the evidence envelope (R3), the step runner and state machine (R4), the adapter
-protocol, the add-on and pack loader, the manager policy engine, the report schema and the exit
-codes. After the Stage 4 freeze (after T10):
+**Core** is: the evidence envelope (R3); the evidence store schema and its migrations; the step
+runner and state machine (R4); the adapter protocol; the add-on and pack loader; the inventory
+engine (source parsers stay in the adapter); the manager policy engine; the claim gate; graph
+storage and query; the report schema; the CLI surface; and the exit codes.
+
+After the Stage 4 freeze (after T10):
 
 - No breaking changes and no capstone-specific code in core.
 - Additive, versioned fields are allowed, and each one requires re-running the contract fixtures.
-- The T14 verifier lives in the AWS add-on, not in core.
-- The T17 spend guard and evaluation ledger live in a separate evaluation module outside core.
+
+Outside core:
+
+- **Blast-radius add-on:** graph mapping (`blast.graph`) and comparison (`blast.compare`).
+- **AWS add-on:** the CloudTrail importer, the attribution join and the T14 verifier.
+- **Evaluation module:** the T17 spend guard and evaluation ledger.
+
+Verifier independence (DEC-012): the verifier may import the T11 evaluator and must never import
+the synthesiser; the synthesiser imports neither the evaluator nor the verifier. An import-boundary
+test enforces this. A verification that used only the local evaluator is labelled `local-only` and
+is not an AC6 pass.
 
 ## OWN topics: hints and review only
 
